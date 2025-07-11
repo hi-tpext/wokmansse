@@ -99,7 +99,6 @@ server
     'sign|签名' => 'require',
     'time|时间戳' => 'require',
     //业务参数
-    'action' => 'push_user',//固定值
     'uid' => '用户id',//业务系统里的用户id
     'nickname' => '昵称',
     'token' => 'token', //你系统里面的用户token
@@ -171,7 +170,6 @@ source.onerror = function (event) {
 'sign|签名' => 'require',
 'time|时间戳' => 'require',
 //业务参数
-'action' => 'push_msg',//固定值
 'uid|接收用户uid' => 'require',//接收用户的uid 如：10，可以多个如：10,11
 'data|数据' => 'require|string',// 如：json_encode(['event' => 'new_order', 'num' => 10])
 ```
