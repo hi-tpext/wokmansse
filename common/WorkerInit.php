@@ -26,7 +26,7 @@ class WorkerInit extends Index
         $host = '0.0.0.0';
         $port = $config['port'] ?: 22990;
 
-        $server = new Worker("Http://{$host}:{$port}");
+        $server = new Worker("http://{$host}:{$port}");
 
         if ($config['user']) {
             $server->user = $config['user'];
