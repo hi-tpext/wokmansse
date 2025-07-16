@@ -23,13 +23,6 @@ class Sse
     /**
      * Undocumented variable
      *
-     * @var SseApp
-     */
-    protected $appLogic;
-
-    /**
-     * Undocumented variable
-     *
      * @var SseUser
      */
     protected $userLogic;
@@ -135,7 +128,6 @@ class Sse
 
         $this->initDb();
 
-        $this->appLogic = new SseApp;
         $this->userLogic = new SseUser;
 
         $this->heartBeat($worker);
