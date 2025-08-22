@@ -5,6 +5,7 @@ namespace wokmansse\api\controller;
 use think\Controller;
 use wokmansse\common\logic\SseApp;
 use wokmansse\common\logic\SseUser;
+use wokmansse\common\Module;
 
 /**
  * 管理接口
@@ -128,24 +129,43 @@ class Woksseadmin extends Controller
             return json($valdate);
         }
 
-        $client = stream_socket_client('tcp://127.0.0.1:11330', $errno, $errstr, 1);
-
         $data = ['action' => 'push_msg', 'uid' => $data['uid'], 'app_id' => $data['app_id'], 'data' => $data['data']];
+
+        $deployModel = Module::getInstance()->config('deploy_model', 0);
+
+        if ($deployModel == 1) {
+            $res = $this->send($data, 11331);
+        } elseif ($deployModel == 2) {
+            $res = $this->send($data, 11330);
+        } else {
+            $res = $this->send($data, 11331);
+            $res1 = $this->send($data, 11330);
+            if ($res['code'] == 0) {
+                $res = $res1;
+            }
+        }
+
+        return json($res);
+    }
+
+    protected function send($data, $port)
+    {
+        $client = stream_socket_client('tcp://127.0.0.1:' . $port, $errno, $errstr, 1);
 
         fwrite($client, json_encode($data) . "\n");
         // 读取推送结果
         $result = fread($client, 8192);
         if ($result && trim($result) == 'done') {
-            return json([
+            return [
                 'code' => 1,
                 'msg' => 'done'
-            ]);
+            ];
         }
 
-        return json([
+        return [
             'code' => 1,
             'msg' => 'failed',
             'result' => $result
-        ]);
+        ];
     }
 }

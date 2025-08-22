@@ -14,25 +14,51 @@ use wokmansse\sse\Index;
  */
 class WorkerInit extends Index
 {
+    protected $config = [];
+    protected $deployModel = 0;
+    protected $port = 0;
+
     public function handle(Manager $manager)
     {
-        $manager->addWorker([$this, 'createHttpServer'], 'wokmansse', 1);
+        $this->config = Module::getInstance()->getConfig();
+        $this->deployModel = $this->config['deploy_model'] ?? 0;
+        $this->port = $this->config['port'] ?: 22990;
+
+        if ($this->deployModel == 1) {
+            $manager->addWorker([$this, 'createHttpServer'], 'wokmansse:' . $this->port, 1);
+        } else if ($this->deployModel == 2) {
+            $manager->addWorker([$this, 'createHttpServer'], 'wokmansse-ws:' . $this->port, 1);
+        } else {
+            $manager->addWorker([$this, 'createHttpServer'], 'wokmansse:' . $this->port, 1);
+            $manager->addWorker([$this, 'createHttpServer'], 'wokmansse-ws:' . ($this->port + 1), 1);
+        }
     }
 
-    public function createHttpServer()
+    public function createHttpServer($worker)
     {
-        $config = Module::getInstance()->getConfig();
-
         $host = '0.0.0.0';
-        $port = $config['port'] ?: 22990;
+        $socketName = '';
 
-        $server = new Worker("http://{$host}:{$port}");
-
-        if ($config['user']) {
-            $server->user = $config['user'];
+        if ($this->deployModel == 1) {
+            $socketName = "http://{$host}:{$this->port}";
+        } else if ($this->deployModel == 2) {
+            $socketName = "websocket://{$host}:{$this->port}";
+        } else {
+            if (strstr($worker->name, 'wokmansse:')) {
+                $socketName = "http://{$host}:{$this->port}";
+            } else {
+                $this->port += 1;
+                $socketName = "websocket://{$host}:{$this->port}";
+            }
         }
-        if ($config['group']) {
-            $server->group = $config['group'];
+
+        $server = new Worker($socketName);
+
+        if ($this->config['user']) {
+            $server->user = $this->config['user'];
+        }
+        if ($this->config['group']) {
+            $server->group = $this->config['group'];
         }
 
         $callbackMap = [
@@ -55,6 +81,10 @@ class WorkerInit extends Index
 
         if (method_exists($this, 'onWorkerStart')) {
             call_user_func([$this, 'onWorkerStart'], $server);
+        }
+
+        if ($this->deployModel == 0) {
+            $server->reusePort = true;
         }
 
         $server->listen();

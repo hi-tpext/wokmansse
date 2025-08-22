@@ -18,6 +18,8 @@ use Workerman\Protocols\Http\ServerSentEvents;
 
 class Sse
 {
+    public const HEARTBEAT_TIME = 60;
+
     protected $appConnections = [];
 
     /**
@@ -29,28 +31,37 @@ class Sse
 
     protected $innerTextWorker = null;
 
+    protected $isWebSocket = false;
+
     /**
      * Undocumented function
      *
      * @param TcpConnection $connection
-     * @param Request $request
+     * @param Request|string $request
      * @return void
      */
     public function onMessage($connection, $request)
     {
-        if ($request->header('accept') === 'text/event-stream') {
-            $res = ['code' => 0, 'msg' => 'failed'];
+        $connection->lastMessageTime = time();
+        $data = $this->isWebSocket ? json_decode($request, true) : $request->get();
 
-            $data = $request->get();
-            if (!empty($data['app_id']) && !empty($data['uid']) && !empty($data['sign']) && !empty($data['time'])) {
-                $res = $this->login($connection, $data);
-            }
+        if (!empty($data) && !empty($data['app_id']) && !empty($data['uid']) && !empty($data['sign']) && !empty($data['time'])) {
+            $res = $this->login($connection, $data);
             if (!empty($connection->app_id) && !empty($connection->uid)) {
-                // 发送一个 Content-Type: text/event-stream 头的响应
-                $response = new Response(200, ['Content-Type' => 'text/event-stream'], "\r\n");
-                $this->setHeaders($response, $request->header('origin'));
-                $connection->send($response);
-                $connection->send(new ServerSentEvents(['event' => 'message', 'data' => json_encode($res, JSON_UNESCAPED_UNICODE)]));
+                if ($this->isWebSocket) {
+                    Timer::del($connection->auth_timer_id); //验证成功，删除定时器，防止连接被关闭
+                    // 发送一个登录成功事件
+                    $connection->send(json_encode($res, JSON_UNESCAPED_UNICODE));
+                } else {
+                    if ($request->header('accept') === 'text/event-stream') { //sse
+                        // 发送一个 Content-Type: text/event-stream 头的响应
+                        $response = new Response(200, ['Content-Type' => 'text/event-stream'], "\r\n");
+                        $this->setHeaders($response, $request->header('origin'));
+                        $connection->send($response);
+                        // 发送一个登录成功事件
+                        $connection->send(new ServerSentEvents(['event' => 'message', 'data' => json_encode($res, JSON_UNESCAPED_UNICODE)]));
+                    }
+                }
                 return;
             }
 
@@ -59,8 +70,9 @@ class Sse
             $this->setHeaders($response, $request->header('origin'));
             $connection->close($response);
         }
-
-        $connection->close("HTTP/1.0 400 Bad Request\r\nServer: workerman\r\n\r\n<div style=\"text-align:center\"><h1>ServerSentEvents</h1><hr>workerman</div>", true);
+        if (!$this->isWebSocket) {
+            $connection->close("HTTP/1.0 400 Bad Request\r\nServer: workerman\r\n\r\n<div style=\"text-align:center\"><h1>ServerSentEvents</h1><hr>workerman</div>", true);
+        }
     }
 
     /**
@@ -116,15 +128,19 @@ class Sse
 
             $this->appConnections[$app_id][$uid][$connection->id] = $connection;
 
-            return ['code' => 1, 'msg' => '登录成功', 'action' => 'login'];
+            return ['code' => 1, 'msg' => '登录成功', 'event' => 'login_succeed'];
         }
 
-        return ['code' => 0, 'msg' => '登录失败-' . $res['msg'], 'action' => 'login'];
+        return ['code' => 0, 'msg' => '登录失败-' . $res['msg'], 'event' => 'login_failed'];
     }
 
     public function onWorkerStart($worker)
     {
-        Log::info("wokmansse onWorkerStart");
+        $socketName = $worker->getSocketName();
+
+        $this->isWebSocket = stripos($socketName, 'websocket') !== false;
+
+        Log::info("wokmansse onWorkerStart:" . $worker->name);
 
         $this->initDb();
 
@@ -146,6 +162,34 @@ class Sse
                 Db::query('SELECT 1'); //保存数据库连接
             });
         }
+
+        if ($this->isWebSocket) {
+            Timer::add(10, function () use ($worker) {
+                $timeNow = time();
+                foreach ($worker->connections as $connection) {
+                    // 有可能该connection还没收到过消息，则lastMessageTime设置为当前时间
+                    if (empty($connection->lastMessageTime)) {
+                        $connection->lastMessageTime = $timeNow;
+                        continue;
+                    }
+                    // 上次通讯时间间隔大于心跳间隔，则认为客户端已经下线，关闭连接
+                    if ($timeNow - $connection->lastMessageTime > static::HEARTBEAT_TIME) {
+                        $data = ['code' => 1, 'msg' => 'bye'];
+                        $connection->send(json_encode($data));
+                        $connection->close();
+                    }
+                }
+            });
+        } else {
+            Timer::add(300, function () use ($worker) {
+                foreach ($worker->connections as $connection) {
+                    $connection->send(new ServerSentEvents([
+                        'event' => 'message',
+                        'data' => json_encode(['event' => 'ping', 'msg' => '每5分钟发送一次，中断则说明掉线'], JSON_UNESCAPED_UNICODE)
+                    ]));
+                }
+            });
+        }
     }
 
     /**
@@ -157,6 +201,14 @@ class Sse
     public function onConnect($connection)
     {
         $connection->maxSendBufferSize = 4 * 1024 * 1024; //4MB，防止数据截断(默认1MB)
+
+        if ($this->isWebSocket) {
+            // 临时给$connection对象添加一个auth_timer_id属性存储定时器id
+            // 定时10秒关闭连接，需要客户端10秒内完成用户登陆验证
+            $connection->auth_timer_id = Timer::add(10, function () use ($connection) {
+                $connection->close();
+            }, null, false);
+        }
     }
 
     /**
@@ -216,7 +268,14 @@ class Sse
             if (isset($this->appConnections[$app_id]) && isset($this->appConnections[$app_id][$uid])) {
                 $userConnections = $this->appConnections[$app_id][$uid];
                 foreach ($userConnections as $conn) {
-                    $conn->send(new ServerSentEvents(['event' => 'message', 'data' => $data]));
+                    if ($this->isWebSocket) {
+                        if (!is_string($data)) {
+                            $data = json_encode($data, JSON_UNESCAPED_UNICODE);
+                        }
+                        $conn->send($data);
+                    } else {
+                        $conn->send(new ServerSentEvents(['event' => 'message', 'data' => $data]));
+                    }
                 }
                 $num += 1;
             }
@@ -256,13 +315,13 @@ class Sse
         $that = $this;
 
         $count = 2;
-        $port = 11330;
+        $port = $this->isWebSocket ? 11330 : 11331;
 
         $this->innerTextWorker = new Worker("Text://127.0.0.1:{$port}");
         $this->innerTextWorker->count = $count;
         $this->innerTextWorker->reusePort = true;
 
-        $this->innerTextWorker->onMessage = function ($connection,  $data = '{}') use ($that) {
+        $this->innerTextWorker->onMessage = function ($connection, $data = '{}') use ($that) {
             $data = json_decode($data, true);
             if (!empty($data) && isset($data['action']) && $data['action'] == 'push_msg') { //通过管理员接口添加消息
                 $res = $that->sendMessageByUid($data['app_id'], $data['uid'], $data['data']);
@@ -276,7 +335,7 @@ class Sse
 
         $this->innerTextWorker->listen();
 
-        echo "Wokmansse innerWoker\t\tText://127.0.0.1:{$port}\t\t{$count}\t\t[ok]\n";
+        echo ($this->isWebSocket ? 'Wokman-ws' : 'Wokman-sse') . " innerWoker\t\tText://127.0.0.1:{$port}\t\t{$count}\t\t[ok]\n";
     }
 
     protected function initDb()

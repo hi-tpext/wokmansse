@@ -16,6 +16,14 @@
        workerman
 ```
 
+或
+
+```bash
+       WebSocket
+-----------------------
+       workerman
+```
+
 如果使用域名连接，需要配置转发，一般和主网站共用域名，指定一个路径如`/sse`做转发
 
 配置好后，求地地址可以为：`http://www.mysiete.com/sse`
@@ -37,7 +45,7 @@ server
 
     #SSL相关配置，使用`https`协议必填
 
-    #sse配置(参考)
+    #sse配置(仅供参考)
     location /sse {
         proxy_pass http://127.0.0.1:22990; #ip和端口根据实际情况调整
         proxy_set_header Host $host;
@@ -47,6 +55,25 @@ server
         proxy_read_timeout 60s;  # 设置代理读取服务器响应的超时时间
         proxy_send_timeout 60s;
         proxy_connect_timeout 1h;  # 设置客户端连接的超时时间
+
+        #其他配置...
+
+        break;
+    }
+
+    #ws配置(仅供参考)
+    location /sse-ws {
+        proxy_pass http://127.0.0.1:22991;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real_IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr:$remote_port;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;   # 升级协议头
+        proxy_set_header Connection upgrade;
+
+        proxy_read_timeout 60s;  # 设置代理读取服务器响应的超时时间
+        proxy_send_timeout 60s;
 
         #其他配置...
 
@@ -123,10 +150,10 @@ server
 
 前端页面使用`http`请求进行登录。
 
-关键 js 代码。
+sse 关键 js 代码
 
 ```javascript
-var uid = 10; //你的uid
+var uid = 10; //接收用户的uid
 var token = "xxxxxxxxxxxxxxxxxxx"; //用户的token
 var app_id = "10001"; //你的app_id
 
@@ -141,7 +168,7 @@ var source = new EventSource(
 source.onmessage = function (msg) {
   var event = msg.event;
   var data = msg.data;
-  console.log('Message successfully received');
+  console.log("Message successfully received");
   console.log(data);
 };
 source.onerror = function (event) {
@@ -150,10 +177,72 @@ source.onerror = function (event) {
 };
 ```
 
+sse 关键 js 代码
+
+```javascript
+var uid = 10; //接收用户的uid
+var token = "xxxxxxxxxxxxxxxxxxx"; //用户的token
+var app_id = "10001"; //你的app_id
+var url = "ws://www.mysiete.com/sse-ws";
+
+var socket = null;
+var isOpen = false;
+var reonnecTimmer = null;
+
+function connect() {
+  // 创建一个新的 WebSocket 连接
+  socket = new WebSocket(url);
+
+  socket.addEventListener("open", function (event) {
+    var time = Math.floor(new Date().getTime() / 1000); //当前时间戳
+    var sign = md5(token + time); //md5加密得sign。此处是伪代码，md5方法需要你自己实现
+
+    var data = { app_id, uid, sign, time };
+    socket.send(JSON.stringify(data));
+    isOpen = true;
+  });
+
+  // 监听消息事件
+  socket.addEventListener("message", function (msg) {
+    console.log("Message successfully received");
+    var data = msg.data;
+    console.log(data);
+  });
+
+  // 监听错误事件
+  socket.addEventListener("error", function (event) {
+    console.error("WebSocket failed.");
+    console.log(event);
+  });
+
+  // 连接关闭时的回调
+  socket.addEventListener("close", function (event) {
+    console.log("WebSocket is closed now.");
+    isOpen = true;
+    if (reonnecTimmer) {
+      clearTimeout(reonnecTimmer);
+    }
+    reonnecTimmer = setTimeout(function () {
+      console.log("重新连接");
+      connect();
+    }, 5000);
+  });
+}
+
+connect(); //开始连接
+
+//保持连接，每50秒发一次消息
+setInterval(function () {
+  if (isOpen) {
+    socket.send("ping");
+  }
+}, 50 * 1000);
+```
+
 连接成功后，浏览器控制台打印。
 
 ```json
-{"code":1,"msg":"登录成功","action":"login"}
+{ "code": 1, "msg": "登录成功", "event": "login_succeed" }
 ```
 
 #### 发送推送消息
@@ -177,7 +266,31 @@ source.onerror = function (event) {
 返回:
 
 ```json
-{"code":1,"msg":"done"} 
+{ "code": 1, "msg": "done" }
 ```
 
-msg为done表示推送成功，为fialed表示推送失败(用户未在线等原因)
+msg 为 done 表示推送成功，为 fialed 表示推送失败(用户未在线等原因)
+
+```php
+public function push()
+{
+    $appSecret = 'xxxxxxxxxxxxxxxx'; //后台查看
+    $app_id = 10001;//应用id
+    $time = time();
+    $sign = md5($appSecret . $time);
+
+    $data = [
+        'app_id' => $app_id,
+        'sign' => $sign,
+        'time' => $time,
+        'uid' => 100,//接收用户id
+        'data' => json_encode(['event' => 'new_order', 'num' => 10]),
+    ];
+
+    $client = new Client();
+
+    $response = $client->request('POST', 'https://www.mysiete.com/api/woksseadmin/pushmsg', [
+        'form_params' => $data,
+    ]);
+}
+```

@@ -1,12 +1,12 @@
 # workman-sse
 
-## workman推送系统
+## workman 推送系统
 
-### 请使用composer安装**think-worker**后再安装本扩展
+### 请使用 composer 安装**think-worker**后再安装本扩展
 
 #### tp8.0
 
-注：think-worker(5.x) 不支持windows环境，请在linux环境下安装。
+注：think-worker(5.x) 不支持 windows 环境，请在 linux 环境下安装。
 
 ```bash
 composer require topthink/think-worker:^5.0
@@ -32,7 +32,7 @@ return [
         'LogLevel' => [],
         'LogWrite' => [],
         // 新增worker.init事件，用于初始化worker
-        'worker.init' => ['wokmansse\\common\\WorkerInit'],
+        'worker.init' => ['wokmansse\\common\\WorkerInit'],//根据扩展配置项【部署模式】不同，开启一个port或连续的两个port
     ],
 
     'subscribe' => [
@@ -40,7 +40,7 @@ return [
 ];
 ```
 
-#### webman修改配置
+#### webman 修改配置
 
 `/config/process.php`
 
@@ -49,18 +49,28 @@ return [
     //....其它配置，这里省略....
     'wokmansse'  => [
         'handler'  => 'wokmansse\\sse\\Index',
-        'listen'  => 'http://0.0.0.0:22990',
+        'listen'  => 'http://0.0.0.0:22990',//支持sse连接
         'count' => 1, // 进程数(只能是1)
         'user' => 'www',
         'group' => 'www',
     ],
+    // 如果需要使用websocket
+    'wokmansse-ws'  => [
+        'handler'  => 'wokmansse\\sse\\Index',
+        'listen'  => 'websocket://0.0.0.0:22991',
+        'count' => 1, // 进程数(只能是1)
+        'user' => 'www',
+        'group' => 'www',
+    ],
+
+    //根据扩展配置项【部署模式】不同，以上两种保留一种或同时保留
 ];
 //修改完重启webman
 ```
 
 #### 环境要求
 
-需要使用以下php方法，确保以下方法未被禁用：
+需要使用以下 php 方法，确保以下方法未被禁用：
 
 ```bash
 pcntl_wait
@@ -89,11 +99,11 @@ if [ $COUNT1 -eq 0 ];then
 fi
 ```
 
-如果需要使用守护进程方式运行，建议使用supervisor来管理进程
+如果需要使用守护进程方式运行，建议使用 supervisor 来管理进程
 
 #### 启动成功
 
-在linux终端执行以下命令，以判断启动成功
+在 linux 终端执行以下命令，以判断启动成功
 
 `ps aux | grep WorkerMan`
 
@@ -106,4 +116,4 @@ www       133280  0.0  0.2 218316 22000 ?        S    11:55   0:00 WorkerMan: wo
 
 如果只有第一条[master process]没有[worker process]，则是启动失败，请到网站的`runimeme`目录里面查看`worker22990.stdout.log`日志分析原因。
 
-使用文档和api文档见 [doc.md](doc.md)
+使用文档和 api 文档见 [doc.md](doc.md)
