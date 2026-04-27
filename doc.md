@@ -150,7 +150,7 @@ server
 
 前端页面使用`http`请求进行登录。
 
-sse 关键 js 代码
+ServerSentEvents 关键 js 代码
 
 ```javascript
 var uid = 10; //接收用户的uid
@@ -177,7 +177,7 @@ source.onerror = function (event) {
 };
 ```
 
-sse 关键 js 代码
+WebSocket 关键 js 代码
 
 ```javascript
 var uid = 10; //接收用户的uid
