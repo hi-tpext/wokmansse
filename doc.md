@@ -52,9 +52,11 @@ server
         proxy_set_header X-Real_IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr:$remote_port;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;  # 设置代理读取服务器响应的超时时间
-        proxy_send_timeout 60s;
-        proxy_connect_timeout 1h;  # 设置客户端连接的超时时间
+        proxy_http_version 1.1;
+        proxy_buffering off;  #不对 SSE 响应进行缓冲，直接透传给客户端
+        proxy_cache off; # 关闭代理缓存
+        proxy_read_timeout 300s; #服务端每5分钟ping一次，这里要大于300秒，否则会频繁断开又自动重连
+        proxy_send_timeout 300s;
 
         #其他配置...
 
