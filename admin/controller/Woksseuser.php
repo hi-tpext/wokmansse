@@ -56,12 +56,12 @@ class Woksseuser extends Controller
         $search->select('app_id')->dataUrl(url('/admin/woksseapp/selectpage'));
         $search->text('nickname');
         $search->text('remark');
+        $search->text('group');
         $search->text('uid');
     }
 
     /**
      * 构建搜索条件
-     * @param array $data
      * @return mixed
      */
     protected function filterWhere()
@@ -76,6 +76,9 @@ class Woksseuser extends Controller
         }
         if (isset($searchData['remark']) && $searchData['remark'] != '') {
             $where[] = ['remark', 'like', '%' . trim($searchData['remark']) . '%'];
+        }
+        if (isset($searchData['group']) && $searchData['group'] != '') {
+            $where[] = ['group', 'like', '%' . trim($searchData['group']) . '%'];
         }
         if (isset($searchData['uid']) && $searchData['uid'] != '') {
             $where[] = ['uid', '=', $searchData['uid']];
@@ -97,6 +100,7 @@ class Woksseuser extends Controller
         $table->show('nickname');
         $table->show('app_id')->to('{app_id}#{app.name}');
         $table->show('remark');
+        $table->show('group');
         $table->show('uid');
 
         $table->show('login_time');
@@ -132,6 +136,7 @@ class Woksseuser extends Controller
         $form->select('app_id')->dataUrl(url('/admin/woksseapp/selectpage'))->required();
         $form->text('nickname')->maxlength(55)->required();
         $form->textarea('remark')->maxlength(55)->required();
+        $form->text('group')->maxlength(50)->required();
 
         if ($isEdit) {
             $form->show('create_time');

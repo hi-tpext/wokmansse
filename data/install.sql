@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `__PREFIX__wok_sse_user` (
   `remark` varchar(55) NOT NULL DEFAULT '' COMMENT '备注',
   `token` varchar(100) NOT NULL DEFAULT '' COMMENT 'token',
   `uid` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '用户外部id',
+  `group` varchar(50) NOT NULL DEFAULT '' COMMENT '分组',
   `login_time` datetime NOT NULL DEFAULT '1970-01-01 00:00:00' COMMENT '登录时间',
   `create_time` datetime NOT NULL DEFAULT '1970-01-01 00:00:00' COMMENT '添加时间',
   `update_time` datetime NOT NULL DEFAULT '1970-01-01 00:00:00' COMMENT '更新时间',

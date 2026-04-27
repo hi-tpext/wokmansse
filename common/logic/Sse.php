@@ -21,6 +21,7 @@ class Sse
     public const HEARTBEAT_TIME = 60;
 
     protected $appConnections = [];
+    protected $appGroups = [];
 
     /**
      * Undocumented variable
@@ -44,9 +45,10 @@ class Sse
     {
         $connection->lastMessageTime = time();
         $data = $this->isWebSocket ? json_decode($request, true) : $request->get();
+        $sseCookie = $this->isWebSocket ? '' : $request->cookie('wokmansse_sign');
 
         if (!empty($data) && !empty($data['app_id']) && !empty($data['uid']) && !empty($data['sign']) && !empty($data['time'])) {
-            $res = $this->login($connection, $data);
+            $res = $this->login($connection, $data, $sseCookie);
             if (!empty($connection->app_id) && !empty($connection->uid)) {
                 if ($this->isWebSocket) {
                     Timer::del($connection->auth_timer_id); //验证成功，删除定时器，防止连接被关闭
@@ -57,6 +59,7 @@ class Sse
                         // 发送一个 Content-Type: text/event-stream 头的响应
                         $response = new Response(200, ['Content-Type' => 'text/event-stream'], "\r\n");
                         $this->setHeaders($response, $request->header('origin'));
+                        $response->cookie('wokmansse_sign', $data['sign'], 3600 * 24 * 7, '', '', false, true);
                         $connection->send($response);
                         // 发送一个登录成功事件
                         $connection->send(new ServerSentEvents(['event' => 'message', 'data' => json_encode($res, JSON_UNESCAPED_UNICODE)]));
@@ -67,7 +70,6 @@ class Sse
 
             $res = json_encode($res, JSON_UNESCAPED_UNICODE);
             $response = new Response(200, ['Content-Type' => 'application/json'], $res);
-            $this->setHeaders($response, $request->header('origin'));
             $connection->close($response);
         }
         if (!$this->isWebSocket) {
@@ -85,7 +87,7 @@ class Sse
     protected function setHeaders($response, $origin = '')
     {
         $response->header('Access-Control-Allow-Origin', $origin ?? '*');
-        $response->header('Access-Control-Allow-Credentials', 'false');
+        $response->header('Access-Control-Allow-Credentials', 'true');
         $response->header('Access-Control-Max-Age', 86400);
         $response->header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     }
@@ -94,10 +96,11 @@ class Sse
      * Summary of login
      * @param TcpConnection $connection
      * @param array $data
+     * @param string $sseCookie
      * 
      * @return array{code: int, msg: array|bool|string}
      */
-    protected function login($connection, $data)
+    protected function login($connection, $data, $sseCookie = '')
     {
         $result = $this->validate($data, [
             'app_id|应用app_id' => 'require|number',
@@ -112,21 +115,30 @@ class Sse
 
         $res = $this->userLogic->validateUser($data['app_id'], $data['uid'], $data['sign'], $data['time']);
 
+        if ($res['code'] != 1 && !empty($sseCookie)) {
+            $res = $this->userLogic->validateCookie($data['app_id'], $data['uid'], $sseCookie);
+        }
+
         if ($res['code'] == 1) {
             //登录成功，设置session
             $app_id = $res['user']['app_id'];
             $uid = $res['user']['uid'];
+            $group = $res['user']['group'] ?: 'default';
 
             if (!isset($this->appConnections[$app_id])) {
                 $this->appConnections[$app_id] = [
                     $uid => [],
                 ];
             }
+            if (!isset($this->appGroups[$app_id][$group])) {
+                $this->appGroups[$app_id][$group] = [];
+            }
 
             $connection->app_id = $app_id;
             $connection->uid = $uid;
 
             $this->appConnections[$app_id][$uid][$connection->id] = $connection;
+            $this->appGroups[$app_id][$group][$uid] = $uid;
 
             return ['code' => 1, 'msg' => '登录成功', 'event' => 'login_succeed'];
         }
@@ -261,7 +273,7 @@ class Sse
             $data = json_encode($data);
         }
 
-        $uids = explode(',', $uid);
+        $uids = array_filter(explode(',', $uid));
 
         $num = 0;
         foreach ($uids as $uid) {
@@ -324,6 +336,13 @@ class Sse
         $this->innerTextWorker->onMessage = function ($connection, $data = '{}') use ($that) {
             $data = json_decode($data, true);
             if (!empty($data) && isset($data['action']) && $data['action'] == 'push_msg') { //通过管理员接口添加消息
+                $res = 0;
+                if (!empty($data['group'])) {
+                    $uids = $that->appGroups[$data['app_id']][$data['group']] ?? [];
+                    if (!empty($uids)) {
+                        $data['uid'] .= ',' . implode(',', array_values($uids));
+                    }
+                }
                 $res = $that->sendMessageByUid($data['app_id'], $data['uid'], $data['data']);
                 if ($res) {
                     $connection->send('done');

@@ -4,6 +4,7 @@ namespace wokmansse\common\logic;
 
 use wokmansse\common\model;
 use wokmansse\common\Module;
+use think\facade\Cache;
 
 /**
  * 封装前台操作，用户推送
@@ -64,6 +65,49 @@ class SseUser
 
         if ($sign != md5($user['token'] . $time)) {
             return ['code' => 0, 'msg' => 'sign验证失败'];
+        }
+
+        $user->save(['login_time' => date('Y-m-d H:i:s')]);
+        unset($user['token']);
+        Cache::set('wokmansse_cookie_' . $app_id . '_' . $uid, $sign);
+
+        return ['code' => 1, 'msg' => '成功', 'user' => $user];
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @param int $app_id
+     * @param int $uid
+     * @param string $sseCookie
+     * @return array
+     */
+    public function validateCookie($app_id, $uid, $sseCookie)
+    {
+        if (empty($app_id) || empty($uid) || empty($sseCookie)) {
+            return ['code' => 0, 'msg' => '参数错误'];
+        }
+
+        $cache = Cache::get('wokmansse_cookie_' . $app_id . '_' . $uid);
+
+        if ($cache !== $sseCookie) {
+            return ['code' => 0, 'msg' => 'cookie验证失败'];
+        }
+
+        $app = model\WokSseApp::where('id', $app_id)->find();
+
+        if (!$app) {
+            return ['code' => 0, 'msg' => 'app_id:应用未找到'];
+        }
+
+        if ($app['enable'] == 0) {
+            return ['code' => 0, 'msg' => '推送应用未开启'];
+        }
+
+        $user = model\WokSseUser::where(['app_id' => $app_id, 'uid' => $uid])->find();
+
+        if (!$user) {
+            return ['code' => 0, 'msg' => 'uid:用户未找到' . $uid . '-' . $app_id];
         }
 
         $user->save(['login_time' => date('Y-m-d H:i:s')]);

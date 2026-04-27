@@ -81,7 +81,7 @@ class Woksseadmin extends Controller
 
         $result = $this->validate($data, [
             'uid|用户uid' => 'require|number',
-            //'nickname|用户昵称' => 'require',
+            'nickname|用户昵称' => 'require',
             //'remark|用户备注' => 'require',
             //'token|用户token' => 'require'
         ]);
@@ -101,7 +101,11 @@ class Woksseadmin extends Controller
             $data['remark'] = $data['nickname'];
         }
 
-        $res = $this->appLogic->pushUser($data['uid'], $data['nickname'], $data['remark'], $data['token']);
+        if (!isset($data['group'])) {
+            $data['group'] = 'default';
+        }
+
+        $res = $this->appLogic->pushUser($data['uid'], $data['nickname'], $data['remark'], $data['token'], $data['group']);
 
         return json($res);
     }
@@ -121,7 +125,6 @@ class Woksseadmin extends Controller
         }
 
         $result = $this->validate($data, [
-            'uid|接收用户uid' => 'require',
             'data|发送内容' => 'require',
         ]);
 
@@ -129,7 +132,20 @@ class Woksseadmin extends Controller
             return json($valdate);
         }
 
-        $data = ['action' => 'push_msg', 'uid' => $data['uid'], 'app_id' => $data['app_id'], 'data' => $data['data']];
+        if (empty($data['uid']) && empty($data['group'])) {
+            return json([
+                'code' => 0,
+                'msg' => 'uid或group不能同时为空'
+            ]);
+        }
+
+        $data = [
+            'action' => 'push_msg',
+            'uid' => $data['uid'],
+            'group' => $data['group'] ?? '',
+            'app_id' => $data['app_id'],
+            'data' => $data['data']
+        ];
 
         $deployModel = Module::getInstance()->config('deploy_model', 0);
 

@@ -10,7 +10,7 @@ use tpext\common\ExtLoader;
  */
 class Module  extends baseModule
 {
-    protected $version = '1.0.1';
+    protected $version = '1.0.2';
 
     protected $name = 'wokman.sse';
 
@@ -27,6 +27,7 @@ class Module  extends baseModule
 
     protected $versions = [
         '1.0.1' => '',
+        '1.0.2' => '1.0.2.sql',
     ];
 
     /**

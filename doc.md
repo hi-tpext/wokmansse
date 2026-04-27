@@ -117,7 +117,7 @@ server
 
 后端请求：：`http://www.mysiete.com/api/woksseadmin/pushUser`
 
-参数：
+php 参数：
 
 ```php
  [
@@ -129,7 +129,8 @@ server
     'uid' => '用户id',//业务系统里的用户id
     'nickname' => '昵称',
     'token' => 'token', //你系统里面的用户token
-    'remark' => '备注信息',
+    'remark' => '备注信息', //备注信息
+    'group' => '分组', //用户分组（可选），默认值为`default`
  ]
  //token不超过100字符，过长建议md5转一下。也可留空，由系统自动生成。
 ```
@@ -160,11 +161,12 @@ var app_id = "10001"; //你的app_id
 var time = Math.floor(new Date().getTime() / 1000); //当前时间戳
 var sign = md5(token + time); //md5加密得sign。此处是伪代码，md5方法需要你自己引入相关js库实现
 
-var url = "http://www.mysiete.com/sse";
+var url = 'http://www.mysiete.com/sse/' + '?app_id=' + app_id + '&uid=' + uid + '&sign=' + sign + '&time=' + time;
 
-var source = new EventSource(
-  url + "?app_id=" + app_id + "&uid=" + uid + "&sign=" + sign + "&time=" + time
-);
+var source = new EventSource(url, {
+      withCredentials: true // 关键：允许跨域携带 Cookie (增强网络抖动是浏览器自动重连的稳定性)
+});
+
 source.onmessage = function (msg) {
   var event = msg.event;
   var data = msg.data;
@@ -218,7 +220,7 @@ function connect() {
   // 连接关闭时的回调
   socket.addEventListener("close", function (event) {
     console.log("WebSocket is closed now.");
-    isOpen = true;
+    isOpen = false;
     if (reonnecTimmer) {
       clearTimeout(reonnecTimmer);
     }
@@ -251,7 +253,7 @@ setInterval(function () {
 
 后端请求：`http://www.mysiete.com/api/woksseadmin/pushMsg`
 
-参数：
+php 参数：
 
 ```php
 //admin-api公共验证参数
@@ -259,7 +261,8 @@ setInterval(function () {
 'sign|签名' => 'require',
 'time|时间戳' => 'require',
 //业务参数
-'uid|接收用户uid' => 'require',//接收用户的uid 如：10，可以多个如：10,11
+'uid|接收用户uid' => 'int|require',//接收用户的uid 如：10，可以多个如：10,11
+'group|分组' => 'string',//用户分组（uid和group只能选1种）
 'data|数据' => 'require|string',// 如：json_encode(['event' => 'new_order', 'num' => 10])
 ```
 
@@ -284,6 +287,7 @@ public function push()
         'sign' => $sign,
         'time' => $time,
         'uid' => 100,//接收用户id
+        // 'group' => 'group_1',
         'data' => json_encode(['event' => 'new_order', 'num' => 10]),
     ];
 

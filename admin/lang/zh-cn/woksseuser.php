@@ -11,6 +11,7 @@ return [
     'nickname'  => '昵称',
     'avatar'  => '头像',
     'remark'  => '备注',
+    'group'  => '分组',
     'token'  => 'token',
     'uid'  => '会员外部id',
     'login_time' => '登录时间',

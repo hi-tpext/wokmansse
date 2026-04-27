@@ -112,9 +112,10 @@ class SseApp
      * @param string $nickname
      * @param string $remark
      * @param string $token
+     * @param string $group
      * @return array
      */
-    public function pushUser($uid, $nickname, $remark, $token = '')
+    public function pushUser($uid, $nickname, $remark, $token = '', $group = '')
     {
         $valdate = $this->isValidateApp();
 
@@ -141,6 +142,7 @@ class SseApp
                 'nickname' => $this->filterEmoji($nickname),
                 'remark' => $this->filterEmoji($remark),
                 'token' => $token,
+                'group' => $group,
             ]);
 
             if ($res) {
@@ -163,6 +165,7 @@ class SseApp
             'nickname' => $this->filterEmoji($nickname),
             'remark' => $this->filterEmoji($remark),
             'token' => $token,
+            'group' => $group,
         ];
 
         $res = $user->save($data);
