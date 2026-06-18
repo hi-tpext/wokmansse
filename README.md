@@ -2,9 +2,15 @@
 
 ## workman 推送系统
 
-### 请使用 composer 安装**think-worker**后再安装本扩展
+### 本推送系统适用范围
+
+- [ - ] Web端推送，如商家新订单提醒
+- [ - ] APP端轻度使用，能确保使用期间不息屏、不切到后台
+- [ x ] APP端系统级推送请使用：个推、极光推送等
 
 #### tp8.0
+
+### 请使用 composer 安装**think-worker**后再安装本扩展
 
 注：think-worker(5.x) 不支持 windows 环境，请在 linux 环境下安装。
 
