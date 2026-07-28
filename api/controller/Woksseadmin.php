@@ -141,7 +141,7 @@ class Woksseadmin extends Controller
 
         $data = [
             'action' => 'push_msg',
-            'uid' => $data['uid'],
+            'uid' => $data['uid'] ?? 0,
             'group' => $data['group'] ?? '',
             'app_id' => $data['app_id'],
             'data' => $data['data']
